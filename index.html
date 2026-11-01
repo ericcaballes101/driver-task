@@ -1,0 +1,656 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Driver Compliance Dashboard</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Public+Sans:wght@400;500;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+/* Layout: one column dashboard. Header with Monthly/Annual tabs, KPI strip, then charts and tables in a 2-col grid that stacks on phones. */
+:root {
+  --bg: #eef2f1;
+  --surface: #ffffff;
+  --surface-2: #f5f8f7;
+  --ink: #12201e;
+  --ink-2: #4a5b58;
+  --ink-3: #74837f;
+  --line: #d9e1df;
+  --accent: #0e6a62;
+  --accent-ink: #ffffff;
+  --accent-soft: #dcefec;
+  --good: #19773f;   --good-bg: #dff1e5;  --good-bar: #2e9a58;
+  --warn: #8a5a00;   --warn-bg: #fbecc8;  --warn-bar: #d99a1c;
+  --crit: #b3261e;   --crit-bg: #fbe0dd;  --crit-bar: #d4493f;
+  --font-display: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1514; --surface: #151f1e; --surface-2: #1b2726; --ink: #e7efed; --ink-2: #a9bab6; --ink-3: #7f918d;
+    --line: #2a3836; --accent: #4cc2b5; --accent-ink: #062320; --accent-soft: #17322f;
+    --good: #6fd08f; --good-bg: #173324; --good-bar: #3fae67;
+    --warn: #f0bd57; --warn-bg: #3a2d10; --warn-bar: #d9a13a;
+    --crit: #ff9087; --crit-bg: #3d1a18; --crit-bar: #e2584d;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1514; --surface: #151f1e; --surface-2: #1b2726; --ink: #e7efed; --ink-2: #a9bab6; --ink-3: #7f918d;
+  --line: #2a3836; --accent: #4cc2b5; --accent-ink: #062320; --accent-soft: #17322f;
+  --good: #6fd08f; --good-bg: #173324; --good-bar: #3fae67;
+  --warn: #f0bd57; --warn-bg: #3a2d10; --warn-bar: #d9a13a;
+  --crit: #ff9087; --crit-bg: #3d1a18; --crit-bar: #e2584d;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 14px; line-height: 1.45;
+  padding-block: 20px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+h1, h2, h3 { font-family: var(--font-display); margin: 0; text-wrap: balance; letter-spacing: .01em; }
+button, select, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.num { font-variant-numeric: tabular-nums; }
+
+/* header */
+.top { display: flex; flex-wrap: wrap; gap: 14px 24px; align-items: flex-end; justify-content: space-between; }
+.eyebrow { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
+h1 { font-size: 34px; font-weight: 700; line-height: 1.05; margin-top: 2px; }
+.tabs { display: inline-flex; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 3px; gap: 2px; }
+.tab { border: 0; background: transparent; padding: 8px 18px; border-radius: 7px; font-weight: 600; cursor: pointer; color: var(--ink-2); }
+.tab[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); }
+
+/* toolbar */
+.bar { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; }
+.field { display: flex; align-items: center; gap: 8px; color: var(--ink-2); font-size: 13px; }
+.field select, .field input { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; color: var(--ink); }
+.field input[type="number"] { width: 72px; }
+.btn { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; font-weight: 600; cursor: pointer; color: var(--ink); }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.spacer { flex: 1 1 auto; }
+
+.drop { border: 1.5px dashed var(--ink-3); border-radius: 12px; padding: 14px 16px; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; background: var(--surface); }
+.drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.drop p { margin: 0; color: var(--ink-2); flex: 1 1 260px; min-width: 0; }
+.drop strong { color: var(--ink); }
+
+.note { border-radius: 10px; padding: 10px 14px; background: var(--warn-bg); color: var(--warn); font-weight: 500; }
+.note.ok { background: var(--good-bg); color: var(--good); }
+.note.bad { background: var(--crit-bg); color: var(--crit); }
+.pendingbox { background: var(--surface); border: 1px solid var(--warn-bar); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.pendingbox .row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chip { display: inline-flex; align-items: center; gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 3px 4px 3px 12px; font-size: 13px; }
+.chip.on { border-color: var(--accent); background: var(--accent-soft); }
+.chip button { border: 0; background: transparent; cursor: pointer; padding: 2px 7px; border-radius: 999px; color: var(--ink-3); font-size: 14px; line-height: 1; }
+.chip button:hover { color: var(--crit); }
+.chip .sel { padding: 2px 4px 2px 0; color: inherit; font-weight: 500; font-size: 13px; }
+
+/* uploaded files */
+.files { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; display: flex; flex-direction: column; gap: 4px; }
+.files .hd { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; }
+.files .hd h2 { font-size: 18px; font-weight: 600; }
+.frow { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
+.frow .fm { font-weight: 600; min-width: 78px; }
+.frow .fn { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; color: var(--ink-2); font-size: 13px; }
+.btn.sm { padding: 5px 12px; font-size: 13px; }
+.btn.danger { color: var(--crit); }
+.btn.danger:hover { border-color: var(--crit); }
+.btn.dangerfill { background: var(--crit); border-color: var(--crit); color: #fff; }
+
+/* KPI strip */
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.kpi .lab { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
+.kpi .val { font-family: var(--font-display); font-weight: 700; font-size: 38px; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.kpi .sub { color: var(--ink-2); font-size: 13px; overflow-wrap: anywhere; }
+.kpi.hero { border-color: var(--accent); }
+.delta.up { color: var(--good); font-weight: 600; } .delta.down { color: var(--crit); font-weight: 600; }
+
+/* panels */
+.grid2 { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 12px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.panel h2 { font-size: 20px; font-weight: 600; }
+.panel .hint { color: var(--ink-3); font-size: 12.5px; margin-top: -8px; }
+.scroll { overflow-x: auto; }
+
+/* pills */
+.pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.pill.good { background: var(--good-bg); color: var(--good); }
+.pill.warn { background: var(--warn-bg); color: var(--warn); }
+.pill.crit { background: var(--crit-bg); color: var(--crit); }
+.pill.none { background: var(--surface-2); color: var(--ink-3); }
+
+/* ranking bars */
+.rank { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.rank li { display: grid; grid-template-columns: minmax(64px, 108px) minmax(0, 1fr) 42px 82px; gap: 8px; align-items: center; }
+.rank.wrap li { grid-template-columns: minmax(96px, 150px) minmax(0, 1fr) 42px 82px; }
+.rank.wrap .rk-name { white-space: normal; line-height: 1.25; }
+.rk-name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rk-track { position: relative; height: 12px; background: var(--surface-2); border-radius: 3px; }
+.rk-track::after { content: ""; position: absolute; top: -3px; bottom: -3px; left: var(--t, 90%); width: 2px; background: var(--ink-2); opacity: .55; }
+.rk-fill { display: block; height: 100%; border-radius: 3px 4px 4px 3px; min-width: 2px; }
+.rk-fill.good { background: var(--good-bar); } .rk-fill.warn { background: var(--warn-bar); } .rk-fill.crit { background: var(--crit-bar); }
+.rk-val { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--ink-3); font-size: 12px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.legend .tg { width: 2px; height: 12px; background: var(--ink-2); opacity: .6; border-radius: 0; }
+
+/* tables */
+table { border-collapse: separate; border-spacing: 0; width: 100%; }
+th, td { padding: 8px 10px; text-align: center; border-bottom: 1px solid var(--line); font-size: 13px; }
+thead th { font-weight: 600; color: var(--ink-2); font-size: 12px; vertical-align: bottom; line-height: 1.25; background: var(--surface); }
+th.l, td.l { text-align: left; }
+tbody th { text-align: left; font-weight: 500; position: sticky; left: 0; background: var(--surface); z-index: 1; white-space: nowrap; }
+.cell { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 24px; border-radius: 6px; font-weight: 700; font-size: 13px; }
+.cell.d { background: var(--good-bg); color: var(--good); }
+.cell.p { background: var(--crit-bg); color: var(--crit); }
+.cell.n { color: var(--ink-3); font-weight: 400; }
+.db { position: relative; height: 24px; min-width: 64px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+.db i { position: absolute; inset: 0 auto 0 0; opacity: .38; }
+.db i.good { background: var(--good-bar); } .db i.warn { background: var(--warn-bar); } .db i.crit { background: var(--crit-bar); }
+.db b { position: relative; display: block; line-height: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.db.empty { background: transparent; } .db.empty b { color: var(--ink-3); font-weight: 400; }
+tfoot td, tfoot th { font-weight: 700; border-bottom: 0; background: var(--surface-2); }
+tfoot th { position: sticky; left: 0; text-align: left; }
+.total-row { display: flex; justify-content: flex-end; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.total-row .big { font-family: var(--font-display); font-size: 30px; font-weight: 700; }
+
+/* follow-up */
+.follow { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.follow li { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.follow li:last-child { border-bottom: 0; padding-bottom: 0; }
+.follow b { min-width: 84px; font-weight: 600; }
+.tag { background: var(--crit-bg); color: var(--crit); border-radius: 6px; padding: 1px 8px; font-size: 12.5px; }
+.empty-msg { color: var(--ink-3); }
+
+/* trend chart */
+.chart { align-self: stretch; }
+.chart svg { width: 100%; height: auto; display: block; overflow: visible; }
+.chart text { fill: var(--ink-3); font-size: 11px; font-family: var(--font-body); }
+.chart .grid { stroke: var(--line); stroke-width: 1; }
+.chart .tgt { stroke: var(--ink-2); stroke-width: 1.2; stroke-dasharray: 4 4; opacity: .7; }
+.chart .ln { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.chart .ar { fill: var(--accent); opacity: .12; }
+.chart .pt { fill: var(--accent); stroke: var(--surface); stroke-width: 2; }
+.chart .hit { fill: transparent; cursor: crosshair; }
+.chart .hot { stroke: var(--ink-3); stroke-width: 1; }
+#tip { position: fixed; z-index: 20; pointer-events: none; background: var(--ink); color: var(--bg); padding: 6px 10px; border-radius: 8px; font-size: 12.5px; box-shadow: 0 4px 14px rgba(0,0,0,.25); max-width: 220px; }
+#tip[hidden] { display: none !important; }
+
+.foot { color: var(--ink-3); font-size: 12.5px; }
+.view[hidden] { display: none !important; }
+
+@media (max-width: 880px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .grid2 { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 520px) { h1 { font-size: 28px; } .kpi .val { font-size: 32px; } .rank li { grid-template-columns: minmax(56px, 84px) minmax(0, 1fr) 38px 74px; gap: 6px; } .tab { padding: 8px 14px; } }
+@media (prefers-reduced-motion: no-preference) { .rk-fill { transition: width .35s ease; } }
+</style>
+
+<div class="wrap">
+  <div class="top">
+    <div>
+      <div class="eyebrow">WVDF Fleet &middot; Driver compliance</div>
+      <h1>Driver Compliance Dashboard</h1>
+    </div>
+    <div class="tabs" role="tablist" aria-label="Dashboard view">
+      <button class="tab" role="tab" id="tab-monthly" data-view="monthly" aria-selected="true">Monthly</button>
+      <button class="tab" role="tab" id="tab-annual" data-view="annual" aria-selected="false">Annual</button>
+    </div>
+  </div>
+
+  <div id="drop" class="drop">
+    <p><strong>Upload your monthly compliance workbook</strong> (.xlsx). Drop it here or use Add file. The month is read from the title in cell A1, for example &ldquo;Drivers Monthly Compliance October, 2026&rdquo;. Each upload is added to the annual dashboard.</p>
+    <button class="btn primary" id="pick" type="button">Add file</button>
+    <input id="file" type="file" accept=".xlsx,.xlsm,.xls,.csv" multiple hidden>
+  </div>
+  <div id="msg" aria-live="polite"></div>
+  <div id="pendingHost"></div>
+  <div id="filesHost"></div>
+
+  <section id="v-monthly" class="view" aria-labelledby="tab-monthly"></section>
+  <section id="v-annual" class="view" hidden aria-labelledby="tab-annual"></section>
+
+  <div class="bar" style="margin-top:4px">
+    <span class="foot" id="storeNote"></span>
+    <span class="spacer"></span>
+    <button class="btn" id="backup" type="button">Save backup</button>
+    <button class="btn" id="restoreBtn" type="button">Restore backup</button>
+    <input id="restore" type="file" accept=".json" hidden>
+  </div>
+</div>
+<div id="tip" hidden></div>
+
+<script>
+(function () {
+  var KEY = "wvdf-driver-compliance-v1";
+  var MN = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  var store = { months: {}, settings: { target: 90, fyStart: 10 }, sampleCleared: false };
+  var ui = { view: "monthly", month: null, fy: null, confirmDel: null, pending: [] };
+  var memoryOnly = false;
+
+  /* Example data: the October 2026 sheet from the uploaded sample file. D = Done, P = Pending. */
+  var SAMPLE = { key: "2026-10", file: "Driver_Monthly_Compliance_Sample.xlsx", sample: true,
+    tasks: ["Fuel Reciept Submission","Maintenance Checklist (March)","Video Walk Around(external Vehicle Check)","VR Encoding","Safe Driving","No LTO and Other Traffic Violation"],
+    drivers: [
+      ["Ares","DDDDDD"],["Alan","DDDDDD"],["Ramil","DDDDDD"],["Randy","DPPDDD"],["Vic","DDDDDD"],["Jong G","DDPDDD"],
+      ["Dennis S","PPPDDD"],["Carlo","PPPDDD"],["Jerome","DDDDDD"],["Chris","DDPDDD"],["Lester","DDDDDD"],["Gilbert","DDDDDD"]
+    ].map(function (d) { return { name: d[0], s: d[1].split("") }; }) };
+
+  function load() {
+    try { var raw = localStorage.getItem(KEY); if (raw) { var o = JSON.parse(raw); if (o && o.months) { store.months = o.months; store.sampleCleared = !!o.sampleCleared; if (o.settings) { store.settings.target = +o.settings.target || 90; store.settings.fyStart = +o.settings.fyStart || 10; } } } } catch (e) { memoryOnly = true; }
+  }
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(store)); memoryOnly = false; } catch (e) { memoryOnly = true; }
+    renderNote();
+  }
+  function isSample() { return !Object.keys(store.months).length && !store.sampleCleared; }
+  function months() { if (isSample()) { var o = {}; o[SAMPLE.key] = SAMPLE; return o; } return store.months; }
+  function keys() { return Object.keys(months()).sort(); }
+
+  /* ---------- helpers ---------- */
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  function lab(key) { var p = key.split("-"); return MN[+p[1] - 1] + " " + p[0]; }
+  function short(key) { var p = key.split("-"); return MN[+p[1] - 1] + "-" + p[0].slice(2); }
+  function r(n) { return Math.round(n); }
+  function target() { return store.settings.target; }
+  function status(p) {
+    if (p == null) return { c: "none", t: "No data", i: "–" };
+    if (p >= target()) return { c: "good", t: "On target", i: "✓" };
+    if (p >= target() - 15) return { c: "warn", t: "Watch", i: "▲" };
+    return { c: "crit", t: "Below", i: "✕" };
+  }
+  function pill(p) { var s = status(p); return '<span class="pill ' + s.c + '"><span aria-hidden="true">' + s.i + "</span>" + s.t + "</span>"; }
+
+  function metrics(m) {
+    var done = 0, total = 0;
+    var ds = m.drivers.map(function (d) {
+      var dn = 0, tt = 0, pend = [];
+      d.s.forEach(function (x, i) { if (x === "D") { dn++; tt++; } else if (x === "P") { tt++; pend.push(m.tasks[i]); } });
+      done += dn; total += tt;
+      return { name: d.name, s: d.s, done: dn, total: tt, pct: tt ? dn / tt * 100 : null, pend: pend };
+    });
+    var tasks = m.tasks.map(function (t, i) {
+      var dn = 0, tt = 0;
+      m.drivers.forEach(function (d) { if (d.s[i] === "D") { dn++; tt++; } else if (d.s[i] === "P") tt++; });
+      return { name: t, done: dn, total: tt, pct: tt ? dn / tt * 100 : null };
+    });
+    return { drivers: ds, tasks: tasks, done: done, total: total, pct: total ? done / total * 100 : null };
+  }
+
+  /* ---------- parsing ---------- */
+  function normStatus(v) {
+    if (v == null) return "";
+    var s = String(v).trim().toLowerCase();
+    if (!s) return "";
+    if (/^(done|complete|completed|yes|y|ok|✓|✔)$/.test(s)) return "D";
+    if (/^(n\/?a|na|-|–)$/.test(s)) return "";
+    return "P";
+  }
+  var STATUS_WORD = /^(done|pending|complete|completed|incomplete|not done|n\/?a|late|missing|yes|no)$/i;
+  var NOT_DRIVER = /complying|percent|%|remarks?|total|average|summary|^task$/i;
+  function detectMonth(text) {
+    if (!text) return null;
+    var s = String(text), m = s.match(/(?:^|[^a-z])(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?/i);
+    if (!m) return null;
+    var y = s.match(/(20\d{2})/), mi = MN.map(function (x) { return x.toLowerCase(); }).indexOf(m[1].toLowerCase()) + 1;
+    var yr = y ? +y[1] : new Date().getFullYear();
+    return yr + "-" + (mi < 10 ? "0" : "") + mi;
+  }
+  function parseRows(rows) {
+    var taskRows = [];
+    rows.forEach(function (row, ri) {
+      if (!row || typeof row[0] !== "string" || !row[0].trim()) return;
+      var n = 0;
+      for (var c = 1; c < row.length; c++) { if (typeof row[c] === "string" && STATUS_WORD.test(row[c].trim())) n++; }
+      if (n >= 2) taskRows.push(ri);
+    });
+    if (!taskRows.length) return null;
+    var first = taskRows[0], hdr = -1;
+    for (var h = first - 1; h >= 0; h--) {
+      var cnt = 0; (rows[h] || []).forEach(function (v, c) { if (c > 0 && typeof v === "string" && v.trim() && v.trim()[0] !== "#") cnt++; });
+      if (cnt >= 2) { hdr = h; break; }
+    }
+    if (hdr < 0) return null;
+    var cols = [];
+    rows[hdr].forEach(function (v, c) {
+      if (c === 0 || typeof v !== "string" || !v.trim() || NOT_DRIVER.test(v.trim())) return;
+      cols.push({ c: c, name: v.trim() });
+    });
+    cols = cols.filter(function (col) { return taskRows.some(function (ri) { return normStatus(rows[ri][col.c]); }); });
+    if (!cols.length) return null;
+    var tasks = taskRows.map(function (ri) { return String(rows[ri][0]).trim(); });
+    var drivers = cols.map(function (col) { return { name: col.name, s: taskRows.map(function (ri) { return normStatus(rows[ri][col.c]); }) }; });
+    return { tasks: tasks, drivers: drivers, rows: rows };
+  }
+  function titleOf(rows) {
+    for (var i = 0; i < Math.min(rows.length, 3); i++) { var row = rows[i] || []; for (var c = 0; c < row.length; c++) { if (typeof row[c] === "string" && row[c].trim()) return row[c]; } }
+    return "";
+  }
+  function readFile(file) {
+    return file.arrayBuffer().then(function (buf) {
+      var wb = XLSX.read(buf, { type: "array" }), found = [], skipped = [];
+      wb.SheetNames.forEach(function (name) {
+        var rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: null, blankrows: true });
+        var p = parseRows(rows);
+        if (!p) { skipped.push(name); return; }
+        var title = titleOf(rows);
+        found.push({ file: file.name, sheet: name, tasks: p.tasks, drivers: p.drivers, key: detectMonth(title) || detectMonth(name) || detectMonth(file.name), title: title });
+      });
+      return { file: file.name, found: found, skipped: skipped };
+    });
+  }
+  function addMonth(it, key) {
+    var replaced = !!store.months[key];
+    if (isSample()) store.months = {};
+    store.sampleCleared = true;
+    store.months[key] = { key: key, file: it.file, tasks: it.tasks, drivers: it.drivers, added: new Date().toISOString() };
+    return replaced;
+  }
+  function importFiles(list) {
+    var files = Array.prototype.slice.call(list);
+    if (!files.length) return;
+    if (typeof XLSX === "undefined") { say("bad", "The spreadsheet reader could not load. Check your connection and reload the page."); return; }
+    say("ok", "Reading " + files.length + " file" + (files.length > 1 ? "s" : "") + "…");
+    Promise.all(files.map(function (f) { return readFile(f).catch(function () { return { file: f.name, error: true, found: [], skipped: [] }; }); })).then(function (res) {
+      var added = [], notes = [], bad = [];
+      res.forEach(function (x) {
+        if (x.error) { bad.push(x.file + " could not be opened"); return; }
+        if (!x.found.length) { bad.push(x.file + " has no task rows with Done or Pending values"); return; }
+        x.found.forEach(function (it) {
+          if (it.key) { var rep = addMonth(it, it.key); added.push(lab(it.key) + (rep ? " (replaced)" : "")); }
+          else ui.pending.push(it);
+        });
+      });
+      if (added.length) { save(); ui.month = null; ui.fy = null; }
+      var msg = [];
+      if (added.length) msg.push("Added " + added.join(", ") + ".");
+      if (ui.pending.length) msg.push("Choose a month for " + ui.pending.length + " sheet" + (ui.pending.length > 1 ? "s" : "") + " below.");
+      if (bad.length) msg.push(bad.join(". ") + ".");
+      say(bad.length && !added.length && !ui.pending.length ? "bad" : "ok", msg.join(" "));
+      render();
+    });
+  }
+  function say(kind, text) {
+    var el = document.getElementById("msg");
+    el.innerHTML = text ? '<div class="note ' + (kind === "ok" ? "ok" : kind === "bad" ? "bad" : "") + '">' + esc(text) + "</div>" : "";
+  }
+
+  /* ---------- views ---------- */
+  function pickMonth() {
+    var ks = keys();
+    if (!ks.length) return null;
+    if (!ui.month || ks.indexOf(ui.month) < 0) ui.month = ks[ks.length - 1];
+    return ui.month;
+  }
+  function rank(items, wrap) {
+    return '<ol class="rank' + (wrap ? ' wrap' : '') + '" style="--t:' + target() + '%">' + items.map(function (it) {
+      var s = status(it.pct);
+      return '<li title="' + esc(it.name) + ': ' + (it.done != null ? it.done + " of " + it.total + " done" : "") + '"><span class="rk-name">' + esc(it.name) + '</span><span class="rk-track"><span class="rk-fill ' + s.c + '" style="width:' + (it.pct == null ? 0 : it.pct) + '%"></span></span><span class="rk-val">' + (it.pct == null ? "–" : r(it.pct) + "%") + "</span>" + pill(it.pct) + "</li>";
+    }).join("") + "</ol>";
+  }
+  function legend() {
+    return '<div class="legend"><span><i style="background:var(--good-bar)"></i>On target (' + target() + '% or more)</span><span><i style="background:var(--warn-bar)"></i>Watch (' + (target() - 15) + '–' + (target() - 1) + '%)</span><span><i style="background:var(--crit-bar)"></i>Below (under ' + (target() - 15) + '%)</span><span><i class="tg"></i>Target line</span></div>';
+  }
+  function settingsBar() {
+    return '<label class="field">Target <input id="target" type="number" min="1" max="100" value="' + target() + '"> %</label>';
+  }
+
+  function renderMonthly() {
+    var host = document.getElementById("v-monthly"), key = pickMonth();
+    if (!key) { host.innerHTML = '<div class="panel"><h2>No months uploaded yet</h2><p class="empty-msg">Upload a monthly compliance workbook above to see this month&rsquo;s dashboard.</p></div>'; return; }
+    var all = months(), m = all[key], x = metrics(m), ks = keys(), idx = ks.indexOf(key);
+    var prev = idx > 0 ? metrics(all[ks[idx - 1]]) : null;
+    var full = x.drivers.filter(function (d) { return d.pct === 100; }).length;
+    var below = x.drivers.filter(function (d) { return d.pct != null && d.pct < target(); }).length;
+    var pend = x.total - x.done;
+    var delta = "";
+    if (prev && prev.pct != null && x.pct != null) { var dd = r(x.pct) - r(prev.pct); delta = dd === 0 ? "No change vs " + short(ks[idx - 1]) : '<span class="delta ' + (dd > 0 ? "up" : "down") + '">' + (dd > 0 ? "▲ " : "▼ ") + Math.abs(dd) + " pts</span> vs " + short(ks[idx - 1]); }
+    else delta = "Overall tasks done";
+    var chips = ks.map(function (k) {
+      return '<span class="chip ' + (k === key ? "on" : "") + '"><button class="sel" data-month="' + k + '" style="padding-right:8px">' + lab(k) + '</button></span>';
+    }).join("");
+    var rankItems = x.drivers.slice().sort(function (a, b) { return (b.pct == null ? -1 : b.pct) - (a.pct == null ? -1 : a.pct) || a.name.localeCompare(b.name); });
+    var taskItems = x.tasks.slice().sort(function (a, b) { return (a.pct == null ? 101 : a.pct) - (b.pct == null ? 101 : b.pct); });
+    var follow = x.drivers.filter(function (d) { return d.pend.length; }).sort(function (a, b) { return b.pend.length - a.pend.length || a.name.localeCompare(b.name); });
+    var thead = "<tr><th class=\"l\">Driver</th>" + m.tasks.map(function (t) { return '<th style="min-width:72px;max-width:120px">' + esc(t) + "</th>"; }).join("") + "<th>Compliance</th></tr>";
+    var tbody = x.drivers.map(function (d) {
+      return '<tr><th scope="row">' + esc(d.name) + "</th>" + d.s.map(function (s) {
+        return s === "D" ? '<td><span class="cell d" title="Done" aria-label="Done">✓</span></td>' : s === "P" ? '<td><span class="cell p" title="Pending" aria-label="Pending">✕</span></td>' : '<td><span class="cell n" aria-label="Not applicable">–</span></td>';
+      }).join("") + "<td>" + (d.pct == null ? "–" : '<b class="num">' + r(d.pct) + "%</b>") + "</td></tr>";
+    }).join("");
+    host.innerHTML =
+      '<div class="bar" style="margin-bottom:12px"><div class="chips" role="group" aria-label="Uploaded months">' + chips + '</div><span class="spacer"></span>' + settingsBar() + "</div>" +
+      '<div class="kpis">' +
+        '<div class="kpi hero"><span class="lab">Fleet compliance · ' + lab(key) + '</span><span class="val">' + (x.pct == null ? "–" : r(x.pct) + "%") + '</span><span class="sub">' + delta + "</span></div>" +
+        '<div class="kpi"><span class="lab">Drivers at 100%</span><span class="val">' + full + '</span><span class="sub">of ' + x.drivers.length + " drivers</span></div>" +
+        '<div class="kpi"><span class="lab">Below ' + target() + '% target</span><span class="val" style="color:' + (below ? "var(--crit)" : "var(--good)") + '">' + below + '</span><span class="sub">' + (below ? "need follow-up" : "all drivers on target") + "</span></div>" +
+        '<div class="kpi"><span class="lab">Pending items</span><span class="val">' + pend + '</span><span class="sub">of ' + x.total + " required tasks</span></div>" +
+      "</div>" +
+      '<div class="grid2" style="margin-top:12px">' +
+        '<div class="panel"><h2>Driver compliance</h2><div class="hint">Share of required tasks marked Done, highest first.</div>' + rank(rankItems) + legend() + "</div>" +
+        '<div class="panel"><h2>Task completion</h2><div class="hint">Which requirements are being missed most, lowest first.</div>' + rank(taskItems.map(function (t) { return { name: t.name, pct: t.pct, done: t.done, total: t.total }; }), true) + "</div>" +
+      "</div>" +
+      '<div class="grid2" style="margin-top:12px;grid-template-columns:minmax(0,1.9fr) minmax(0,1fr)">' +
+        '<div class="panel"><h2>Compliance matrix</h2><div class="scroll"><table><thead>' + thead + "</thead><tbody>" + tbody + "</tbody></table></div></div>" +
+        '<div class="panel"><h2>Follow-up list</h2><div class="hint">Pending tasks by driver.</div>' +
+          (follow.length ? '<ul class="follow">' + follow.map(function (d) { return "<li><b>" + esc(d.name) + '</b><span class="num" style="color:var(--ink-3)">' + d.pend.length + " pending</span>" + d.pend.map(function (t) { return '<span class="tag">' + esc(t) + "</span>"; }).join("") + "</li>"; }).join("") + "</ul>" : '<p class="empty-msg">Every driver completed every task this month.</p>') +
+        "</div>" +
+      "</div>" +
+      '<p class="foot" style="margin:12px 0 0">Compliance = tasks marked Done ÷ tasks with an entry. Fleet compliance counts every driver&rsquo;s tasks together.' + (m.file ? " Source: " + esc(m.file) + "." : "") + "</p>";
+  }
+
+  function fyOf(key) { var p = key.split("-"), y = +p[0], mo = +p[1]; return mo >= store.settings.fyStart ? y : y - 1; }
+  function fyLabel(y) { var s = store.settings.fyStart; if (s === 1) return String(y); return MN[s - 1] + " " + y + " – " + MN[(s + 10) % 12] + " " + (y + 1); }
+  function fyMonths(y) {
+    var s = store.settings.fyStart, out = [];
+    for (var i = 0; i < 12; i++) { var mo = ((s - 1 + i) % 12) + 1, yr = y + ((s - 1 + i) >= 12 ? 1 : 0); out.push(yr + "-" + (mo < 10 ? "0" : "") + mo); }
+    return out;
+  }
+  function mean(a) { a = a.filter(function (v) { return v != null; }); return a.length ? a.reduce(function (s, v) { return s + v; }, 0) / a.length : null; }
+
+  function annualModel() {
+    var ks = keys(); if (!ks.length) return null;
+    var fys = []; ks.forEach(function (k) { var y = fyOf(k); if (fys.indexOf(y) < 0) fys.push(y); });
+    fys.sort();
+    if (ui.fy == null || fys.indexOf(ui.fy) < 0) ui.fy = fys[fys.length - 1];
+    var all = months(), cal = fyMonths(ui.fy), names = [], seen = {};
+    var rows = cal.map(function (k) {
+      if (!all[k]) return { key: k, has: false, cells: {}, pct: null };
+      var x = metrics(all[k]), cells = {};
+      x.drivers.forEach(function (d) { var id = d.name.toLowerCase(); if (!seen[id]) { seen[id] = d.name; names.push(id); } cells[id] = d.pct; });
+      return { key: k, has: true, cells: cells, pct: x.pct, pend: x.total - x.done, total: x.total };
+    });
+    var tmap = {}, torder = [];
+    cal.forEach(function (k) {
+      if (!all[k]) return;
+      metrics(all[k]).tasks.forEach(function (t) {
+        var id = t.name.toLowerCase().replace(/\s*\([^)]*\)/g, "").replace(/\s+/g, " ").trim();
+        if (!tmap[id]) { tmap[id] = { id: id, names: [], done: 0, total: 0 }; torder.push(id); }
+        var o = tmap[id]; if (o.names.indexOf(t.name) < 0) o.names.push(t.name); o.done += t.done; o.total += t.total;
+      });
+    });
+    var tasks = torder.map(function (id) { var o = tmap[id]; return { name: o.names.length > 1 ? o.names[o.names.length - 1].replace(/\s*\([^)]*\)/g, "").trim() : o.names[0], done: o.done, total: o.total, pct: o.total ? o.done / o.total * 100 : null }; });
+    var drivers = names.map(function (id) { var vals = rows.map(function (rw) { return rw.cells[id] == null ? null : rw.cells[id]; }); return { id: id, name: seen[id], eff: mean(vals), n: vals.filter(function (v) { return v != null; }).length }; });
+    return { fys: fys, rows: rows, drivers: drivers, tasks: tasks, fleet: mean(rows.map(function (rw) { return rw.pct; })), reported: rows.filter(function (rw) { return rw.has; }).length };
+  }
+
+  function trendSvg(rows) {
+    var W = 720, H = 240, L = 38, R = 18, T = 14, B = 30, pw = W - L - R, ph = H - T - B;
+    var n = rows.length, step = pw / n;
+    function X(i) { return L + step * (i + .5); } function Y(v) { return T + ph * (1 - v / 100); }
+    var s = '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="Fleet compliance by month">';
+    [0, 25, 50, 75, 100].forEach(function (v) { s += '<line class="grid" x1="' + L + '" x2="' + (W - R) + '" y1="' + Y(v) + '" y2="' + Y(v) + '"/><text x="' + (L - 6) + '" y="' + (Y(v) + 4) + '" text-anchor="end">' + v + "%</text>"; });
+    s += '<line class="tgt" x1="' + L + '" x2="' + (W - R) + '" y1="' + Y(target()) + '" y2="' + Y(target()) + '"/><text x="' + (W - R) + '" y="' + (Y(target()) - 5) + '" text-anchor="end">Target ' + target() + "%</text>";
+    rows.forEach(function (rw, i) { s += '<text x="' + X(i) + '" y="' + (H - 8) + '" text-anchor="middle">' + MN[+rw.key.split("-")[1] - 1] + "</text>"; });
+    var pts = []; rows.forEach(function (rw, i) { if (rw.pct != null) pts.push([X(i), Y(rw.pct), rw, i]); });
+    if (pts.length > 1) {
+      var d = pts.map(function (p, i) { return (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1); }).join(" ");
+      s += '<path class="ar" d="' + d + " L" + pts[pts.length - 1][0].toFixed(1) + " " + Y(0) + " L" + pts[0][0].toFixed(1) + " " + Y(0) + ' Z"/><path class="ln" d="' + d + '"/>';
+    }
+    pts.forEach(function (p, i) {
+      var last = i === pts.length - 1;
+      s += '<circle class="pt" cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1) + '" r="' + (last ? 5.5 : 4) + '"/>';
+      s += '<text x="' + p[0].toFixed(1) + '" y="' + (p[1] - 10).toFixed(1) + '" text-anchor="middle" style="fill:var(--ink);font-weight:600">' + r(p[2].pct) + "%</text>";
+    });
+    rows.forEach(function (rw, i) { s += '<rect class="hit" data-tip="' + esc(lab(rw.key) + (rw.has ? ": " + r(rw.pct) + "% fleet compliance, " + rw.pend + " pending of " + rw.total : ": no upload")) + '" x="' + (X(i) - step / 2) + '" y="' + T + '" width="' + step + '" height="' + ph + '"/>'; });
+    return s + "</svg>";
+  }
+
+  function renderAnnual() {
+    var host = document.getElementById("v-annual"), a = annualModel();
+    if (!a) { host.innerHTML = '<div class="panel"><h2>No months uploaded yet</h2><p class="empty-msg">Upload monthly workbooks above. Each month appears here as it is added.</p></div>'; return; }
+    var fyOpts = a.fys.map(function (y) { return '<option value="' + y + '"' + (y === ui.fy ? " selected" : "") + ">" + fyLabel(y) + "</option>"; }).join("");
+    var startOpts = [[10, "October"], [1, "January"]].map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === store.settings.fyStart ? " selected" : "") + ">" + o[1] + "</option>"; }).join("");
+    var ranked = a.drivers.filter(function (d) { return d.eff != null; }).sort(function (p, q) { return q.eff - p.eff; });
+    var best = ranked[0], worst = ranked[ranked.length - 1];
+    var below = ranked.filter(function (d) { return d.eff < target(); }).length;
+    var head = '<tr><th class="l" style="position:sticky;left:0;background:var(--surface);z-index:2">Month</th>' + a.drivers.map(function (d) { return '<th style="min-width:78px">' + esc(d.name) + "</th>"; }).join("") + '<th style="min-width:78px">Overall</th></tr>';
+    function bar(p) { if (p == null) return '<div class="db empty"><b>–</b></div>'; var s = status(p); return '<div class="db" title="' + r(p) + '%"><i class="' + s.c + '" style="width:' + p + '%"></i><b>' + r(p) + "%</b></div>"; }
+    var body = a.rows.map(function (rw) { return '<tr><th scope="row">' + short(rw.key) + "</th>" + a.drivers.map(function (d) { return "<td>" + bar(rw.cells[d.id]) + "</td>"; }).join("") + "<td>" + bar(rw.pct) + "</td></tr>"; }).join("");
+    var foot = '<tr><th>Driver efficiency</th>' + a.drivers.map(function (d) { return "<td>" + bar(d.eff) + "</td>"; }).join("") + "<td></td></tr>";
+    host.innerHTML =
+      '<div class="bar" style="margin-bottom:12px"><label class="field">Year <select id="fy">' + fyOpts + '</select></label><label class="field">Year starts in <select id="fystart">' + startOpts + "</select></label><span class=\"spacer\"></span>" + settingsBar() + '<button class="btn" id="exportXlsx" type="button">Export summary (.xlsx)</button></div>' +
+      '<div class="kpis">' +
+        '<div class="kpi hero"><span class="lab">Total fleet efficiency</span><span class="val">' + (a.fleet == null ? "–" : r(a.fleet) + "%") + '</span><span class="sub">' + fyLabel(ui.fy) + "</span></div>" +
+        '<div class="kpi"><span class="lab">Months reported</span><span class="val">' + a.reported + '<span style="font-size:20px;color:var(--ink-3)"> / 12</span></span><span class="sub">' + (12 - a.reported) + " still to come</span></div>" +
+        '<div class="kpi"><span class="lab">Top driver</span><span class="val">' + (best ? r(best.eff) + "%" : "–") + '</span><span class="sub">' + (best ? esc(best.name) : "No data") + "</span></div>" +
+        '<div class="kpi"><span class="lab">Lowest driver</span><span class="val" style="color:' + (worst && worst.eff < target() ? "var(--crit)" : "inherit") + '">' + (worst ? r(worst.eff) + "%" : "–") + '</span><span class="sub">' + (worst ? esc(worst.name) + " · " + below + " below target" : "No data") + "</span></div>" +
+      "</div>" +
+      '<div class="grid2" style="margin-top:12px">' +
+        '<div style="display:flex;flex-direction:column;gap:12px;min-width:0"><div class="panel chart"><h2>Fleet compliance by month</h2><div class="hint">All drivers and tasks together for each month.</div>' + trendSvg(a.rows) + "</div>" +
+        '<div class="panel"><h2>Task completion</h2><div class="hint">Which requirements are being missed most across ' + fyLabel(ui.fy) + ', lowest first.</div>' + rank(a.tasks.slice().sort(function (p, q) { return (p.pct == null ? 101 : p.pct) - (q.pct == null ? 101 : q.pct); }), true) + "</div></div>" +
+        '<div class="panel"><h2>Driver efficiency</h2><div class="hint">Average of each driver&rsquo;s reported months, highest first.</div>' + rank(ranked.map(function (d) { return { name: d.name, pct: d.eff }; })) + legend() + "</div>" +
+      "</div>" +
+      '<div class="panel" style="margin-top:12px"><h2>Drivers annual compliance efficiency summary</h2><div class="hint">Monthly compliance per driver. A dash means no upload or the driver was not on that month&rsquo;s sheet.</div>' +
+        '<div class="scroll"><table><thead>' + head + "</thead><tbody>" + body + "</tbody><tfoot>" + foot + "</tfoot></table></div>" +
+        '<div class="total-row"><span class="eyebrow">Total fleet efficiency</span><span class="big num">' + (a.fleet == null ? "–" : r(a.fleet) + "%") + "</span>" + pill(a.fleet) + "</div></div>" +
+      '<p class="foot" style="margin:12px 0 0">Driver efficiency is the average of that driver&rsquo;s monthly percentages. Total fleet efficiency is the average of the monthly fleet percentages. Months with no upload are left out, not counted as 0%.</p>';
+  }
+
+  function renderFiles() {
+    var host = document.getElementById("filesHost"), all = months(), ks = keys();
+    if (!ks.length) { host.innerHTML = ""; return; }
+    var rows = ks.map(function (k) {
+      var m = all[k], c = ui.confirmDel === k;
+      var act = c ? '<span style="color:var(--crit);font-weight:600">Remove ' + lab(k) + '?</span><button class="btn sm dangerfill" data-rm-yes="' + k + '" type="button">Yes, remove</button><button class="btn sm" data-rm-no="1" type="button">Cancel</button>'
+        : '<button class="btn sm danger" data-rm="' + k + '" type="button" aria-label="Remove ' + lab(k) + '">Remove</button>';
+      return '<div class="frow"><span class="fm">' + lab(k) + '</span><span class="fn">' + (m.sample ? "Example data from your sample file" : esc(m.file || "Uploaded file")) + " · " + m.drivers.length + " drivers, " + m.tasks.length + ' tasks</span>' + act + "</div>";
+    }).join("");
+    var allBtn = ks.length > 1 ? (ui.confirmDel === "*" ? '<span style="color:var(--crit);font-weight:600">Remove all ' + ks.length + ' months?</span><button class="btn sm dangerfill" data-rm-yes="*" type="button">Yes, remove all</button><button class="btn sm" data-rm-no="1" type="button">Cancel</button>' : '<button class="btn sm danger" data-rm="*" type="button">Remove all</button>') : "";
+    host.innerHTML = '<div class="files"><div class="hd"><h2>Uploaded files</h2><div class="chips">' + allBtn + '<button class="btn sm" data-add="1" type="button">Add file</button></div></div>' + rows + "</div>";
+  }
+  function render() {
+    renderPending();
+    renderFiles();
+    renderMonthly();
+    renderAnnual();
+    document.getElementById("v-monthly").hidden = ui.view !== "monthly";
+    document.getElementById("v-annual").hidden = ui.view !== "annual";
+    ["monthly", "annual"].forEach(function (v) { document.getElementById("tab-" + v).setAttribute("aria-selected", ui.view === v ? "true" : "false"); });
+    var sb = document.getElementById("sampleBanner");
+    if (isSample() && !sb) { var d = document.createElement("div"); d.id = "sampleBanner"; d.className = "note"; d.textContent = "You are looking at example data from your sample file (October 2026). It is replaced as soon as you upload your first real month."; document.getElementById("msg").after(d); }
+    if (!isSample() && sb) sb.remove();
+    renderNote();
+  }
+  function renderNote() {
+    document.getElementById("storeNote").textContent = memoryOnly ? "This browser is not keeping data between visits. Use Save backup to keep a copy." : "Uploaded months are kept in this browser on this device.";
+  }
+  function renderPending() {
+    var host = document.getElementById("pendingHost");
+    if (!ui.pending.length) { host.innerHTML = ""; return; }
+    host.innerHTML = '<div class="pendingbox"><strong>The month could not be read from these sheets. Pick it to finish adding them.</strong>' + ui.pending.map(function (it, i) {
+      return '<div class="row"><span style="flex:1 1 220px;min-width:0;overflow-wrap:anywhere">' + esc(it.file) + (it.sheet ? " · " + esc(it.sheet) : "") + '</span><input type="month" id="pm' + i + '" aria-label="Month for ' + esc(it.file) + '"><button class="btn primary" data-pm="' + i + '" type="button">Add</button></div>';
+    }).join("") + "</div>";
+  }
+
+  /* ---------- events ---------- */
+  document.addEventListener("click", function (e) {
+    var t = e.target.closest("button,.hit"); if (!t) return;
+    if (t.dataset.view) { ui.view = t.dataset.view; try { history.replaceState(null, "", "#" + ui.view); } catch (x) {} render(); return; }
+    if (t.dataset.month) { ui.month = t.dataset.month; ui.confirmDel = null; render(); return; }
+    if (t.dataset.add) { document.getElementById("file").click(); return; }
+    if (t.dataset.rm) { ui.confirmDel = t.dataset.rm; render(); return; }
+    if (t.dataset.rmNo) { ui.confirmDel = null; render(); return; }
+    if (t.dataset.rmYes) {
+      var k = t.dataset.rmYes;
+      if (k === "*") { store.months = {}; say("ok", "All months removed."); }
+      else { delete store.months[k]; say("ok", "Removed " + lab(k) + "."); }
+      ui.confirmDel = null; ui.month = null; ui.fy = null; store.sampleCleared = true; save(); render(); return;
+    }
+    if (t.dataset.pm != null) {
+      var i = +t.dataset.pm, v = document.getElementById("pm" + i).value;
+      if (!v) { say("", "Choose a month first."); return; }
+      var it = ui.pending[i]; var rep = addMonth(it, v); ui.pending.splice(i, 1); save(); ui.month = v; ui.fy = null;
+      say("ok", "Added " + lab(v) + (rep ? " (replaced)" : "") + "."); render(); return;
+    }
+    if (t.id === "pick") { document.getElementById("file").click(); return; }
+    if (t.id === "restoreBtn") { document.getElementById("restore").click(); return; }
+    if (t.id === "backup") { backup(); return; }
+    if (t.id === "exportXlsx") { exportXlsx(); return; }
+  });
+  document.getElementById("file").addEventListener("change", function (e) { importFiles(e.target.files); e.target.value = ""; });
+  document.getElementById("restore").addEventListener("change", function (e) {
+    var f = e.target.files[0]; e.target.value = ""; if (!f) return;
+    f.text().then(function (txt) {
+      var o = JSON.parse(txt); if (!o || !o.months) throw new Error("bad");
+      Object.keys(o.months).forEach(function (k) { store.months[k] = o.months[k]; });
+      if (o.settings) { store.settings.target = +o.settings.target || store.settings.target; store.settings.fyStart = +o.settings.fyStart || store.settings.fyStart; }
+      store.sampleCleared = true; ui.month = null; ui.fy = null; save(); say("ok", "Backup restored: " + Object.keys(o.months).length + " months."); render();
+    }).catch(function () { say("bad", "That file is not a backup from this dashboard."); });
+  });
+  document.addEventListener("change", function (e) {
+    var t = e.target;
+    if (t.id === "target") { var v = Math.max(1, Math.min(100, +t.value || 90)); store.settings.target = v; save(); render(); }
+    if (t.id === "fy") { ui.fy = +t.value; render(); }
+    if (t.id === "fystart") { store.settings.fyStart = +t.value; ui.fy = null; save(); render(); }
+  });
+  var drop = document.getElementById("drop");
+  ["dragenter", "dragover"].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add("over"); }); });
+  ["dragleave", "drop"].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove("over"); }); });
+  drop.addEventListener("drop", function (e) { importFiles(e.dataTransfer.files); });
+  window.addEventListener("dragover", function (e) { e.preventDefault(); }); window.addEventListener("drop", function (e) { e.preventDefault(); });
+
+  var tip = document.getElementById("tip");
+  document.addEventListener("mousemove", function (e) {
+    var h = e.target.closest && e.target.closest(".hit");
+    if (!h) { tip.hidden = true; return; }
+    tip.textContent = h.getAttribute("data-tip"); tip.hidden = false;
+    tip.style.left = Math.min(e.clientX + 14, window.innerWidth - 230) + "px"; tip.style.top = (e.clientY + 14) + "px";
+  });
+
+  /* ---------- save / export ---------- */
+  function offer(filename, data) {
+    return (window.claude && window.claude.use ? window.claude.use("downloads") : Promise.resolve(null)).then(function (d) {
+      if (!d) { say("bad", "Saving files is not available in this view."); return; }
+      return d.save({ filename: filename, data: data }).then(function () { say("ok", "Saved " + filename + "."); }, function (err) { if (!err || err.code !== "declined") say("bad", "The file could not be saved."); });
+    });
+  }
+  function backup() { offer("driver-compliance-backup.json", JSON.stringify({ months: months(), settings: store.settings }, null, 1)); }
+  function exportXlsx() {
+    var a = annualModel(); if (!a) return;
+    var aoa = [["Drivers Annual Compliance Efficiency Summary — " + fyLabel(ui.fy)], [], ["Month"].concat(a.drivers.map(function (d) { return d.name; }), ["Overall %"])];
+    a.rows.forEach(function (rw) { aoa.push([short(rw.key)].concat(a.drivers.map(function (d) { var v = rw.cells[d.id]; return v == null ? "" : Math.round(v) / 100; }), [rw.pct == null ? "" : Math.round(rw.pct) / 100])); });
+    aoa.push(["Driver Compliance Efficiency"].concat(a.drivers.map(function (d) { return d.eff == null ? "" : Math.round(d.eff) / 100; }), [""]));
+    aoa.push([]); aoa.push(["Total Fleet Efficiency", a.fleet == null ? "" : Math.round(a.fleet) / 100]);
+    var ws = XLSX.utils.aoa_to_sheet(aoa);
+    Object.keys(ws).forEach(function (k) { if (k[0] !== "!" && ws[k].t === "n") ws[k].z = "0%"; });
+    ws["!cols"] = [{ wch: 28 }].concat(a.drivers.map(function () { return { wch: 11 }; }), [{ wch: 11 }]);
+    var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Annual Summary");
+    offer("Drivers-Annual-Compliance-" + fyLabel(ui.fy).replace(/[^0-9A-Za-z]+/g, "-") + ".xlsx", XLSX.write(wb, { type: "array", bookType: "xlsx" }));
+  }
+
+  /* ---------- boot ---------- */
+  load();
+  if (location.hash === "#annual") ui.view = "annual";
+  window.addEventListener("hashchange", function () { ui.view = location.hash === "#annual" ? "annual" : "monthly"; render(); });
+  window.__dash = { parseRows: parseRows, detectMonth: detectMonth, readFile: readFile, metrics: metrics, SAMPLE: SAMPLE };
+  render();
+})();
+</script>
+
+</body></html>
